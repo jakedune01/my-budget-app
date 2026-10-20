@@ -6,23 +6,6 @@
 <meta name="theme-color" content="#101827">
 <link rel="manifest" href="./manifest.json">
 <title>My Budget</title>
-  .app-footer {
-  text-align: center;
-  padding: 25px 12px;
-  margin-top: 20px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.app-footer strong {
-  color: var(--accent);
-}
-
-.app-footer small {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-}
 <style>
 :root {
   --bg:#f2f5fa; --card:#fff; --text:#172033;
@@ -111,7 +94,30 @@ form {display:grid;gap:12px}
 .actions {display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .empty {text-align:center;padding:25px 10px;color:var(--muted);font-size:14px}
 .note {font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
-footer {text-align:center;color:var(--muted);font-size:12px;padding:10px}
+footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px;
+}
+
+.app-footer {
+  margin-top: 20px;
+  padding: 25px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.app-footer strong {
+  color: var(--primary);
+}
+
+.app-footer small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
 </style>
 </head>
 <body>
@@ -541,8 +547,8 @@ trend.innerHTML = months.map(m => `
 })();
 </script>
   <footer class="app-footer">
-  <p>Made with ❤️ by <strong>Jibin</strong></p>
-  <small>Personal Budget Tracker · 2026</small>
+  <p>Made with ❤️ by <strong>Jibin</strong> 😎</p>
+  <small>My Budget · Personal Finance Tracker · 2026</small>
   </footer>
 </body>
   <script>
