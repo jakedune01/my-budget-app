@@ -1,7 +1,7 @@
 {
   "name": "My Budget - Money Manager",
   "short_name": "My Budget",
-  "description": "Your personal offline budget manager",
+  "description": "Your personal budget manager",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
