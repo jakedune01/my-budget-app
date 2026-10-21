@@ -41,10 +41,36 @@ body.dark .budget-alert.warning{background:#3a2e18;color:#ffe2a0;border-color:#6
 body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#743443}
 .app-footer{margin-top:20px;padding:25px 12px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--border)}.app-footer p{margin:0}.app-footer strong{color:var(--primary)}.app-footer small{display:block;margin-top:6px;font-size:12px}
 @media(max-width:360px){.balance .amount{font-size:28px}.balance-grid strong{font-size:14px}.two{gap:7px}.card{padding:13px}.doughnut-row{gap:10px}#categoryChart{width:145px;height:145px}}
+
+.pin-overlay{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.pin-overlay[hidden]{display:none}
+.pin-panel{width:100%;max-width:360px;background:var(--card);border:1px solid var(--border);border-radius:22px;padding:24px;box-shadow:0 18px 55px #0002;text-align:center}
+.pin-panel .pin-icon{font-size:42px;margin-bottom:8px}
+.pin-panel h2{margin:0 0 8px;font-size:22px}
+.pin-panel p{color:var(--muted);font-size:13px;line-height:1.5}
+.pin-panel form{margin-top:18px;text-align:left}
+.pin-error{color:var(--red)!important;min-height:18px;margin:8px 0 0}
+.pin-actions{display:grid;gap:10px;margin-top:14px}
 </style>
 </head>
 <body>
-<header><div><h1>💰 My Budget</h1><p>Your money, under control.</p></div><button class="icon" id="themeBtn" aria-label="Toggle theme">🌙</button></header>
+
+<div class="pin-overlay" id="pinOverlay" role="dialog" aria-modal="true" aria-labelledby="pinHeading">
+  <div class="pin-panel">
+    <div class="pin-icon">🔐</div>
+    <h2 id="pinHeading">My Budget is locked</h2>
+    <p id="pinDescription">Enter your PIN to access your budget.</p>
+    <form id="pinForm">
+      <div><label for="pinInput" id="pinLabel">PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" required placeholder="Enter 4–8 digit PIN"></div>
+      <div id="pinConfirmWrap" hidden><label for="pinConfirm">Confirm PIN</label><input id="pinConfirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="new-password" placeholder="Re-enter PIN"></div>
+      <p class="pin-error" id="pinError" aria-live="polite"></p>
+      <button class="primary" id="pinSubmit" type="submit" style="width:100%">Unlock</button>
+    </form>
+    <div class="pin-actions"><button class="secondary" id="pinCancel" type="button" hidden>Cancel</button></div>
+    <p class="note">PIN lock helps prevent casual access on this device. It does not encrypt your saved data and is not a substitute for your phone's screen lock.</p>
+  </div>
+</div>
+<header><div><h1>💰 My Budget</h1><p>Your money, under control.</p></div><div style="display:flex;gap:8px"><button class="icon" id="lockBtn" aria-label="Lock app" title="Lock app">🔒</button><button class="icon" id="themeBtn" aria-label="Toggle theme">🌙</button></div></header>
 <main>
 <div class="month-row"><strong>Overview</strong><input type="month" id="month" aria-label="Select month"></div>
 <section class="card balance"><div class="muted">Remaining balance this month</div><div class="amount" id="balance">₹0.00</div><div class="balance-grid"><div><small>↗ Income</small><strong id="income">₹0.00</strong></div><div><small>↘ Expenses</small><strong id="expense">₹0.00</strong></div></div></section>
@@ -85,7 +111,7 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
 <section class="card"><h2 class="section-title">📊 Expense by Category</h2><div id="categories" class="muted" style="font-size:13px">No expenses yet.</div></section>
 <section class="card"><h2 class="section-title">📒 Transactions</h2><div id="transactions"></div></section>
 <section class="card"><h2 class="section-title">💾 Backup & Restore</h2><div class="actions"><button class="secondary" id="exportBtn" type="button">⬇️ Export Backup</button><button class="secondary" id="importBtn" type="button">⬆️ Import Backup</button></div><input type="file" id="importFile" accept=".json,application/json" hidden><p class="note">Export a backup regularly. Import it on another device to restore your records. Data is not automatically synchronized between devices.</p><button class="secondary" id="csvBtn" type="button" style="width:100%;margin-top:8px">Export Transactions as CSV</button></section>
-<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
+<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><div class="two" style="margin-bottom:10px"><button class="secondary" id="changePinBtn" type="button">Change PIN</button><button class="secondary" id="disablePinBtn" type="button">Disable PIN Lock</button></div><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
 <footer class="app-footer"><p>Made with ❤️ by <strong>Jibin</strong> 😎</p><small>My Budget · Personal Finance Tracker · 2026</small></footer>
 </main>
 <script>
@@ -225,6 +251,80 @@ $('importBtn').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async e=>{const file=e.target.files&&e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());const txs=Array.isArray(data)?data:data.transactions;const bgs=Array.isArray(data)?{}:data.budgets;if(!Array.isArray(txs)||!txs.every(t=>t&&['income','expense'].includes(t.type)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0&&typeof t.title==='string'&&typeof t.date==='string'))throw new Error('Invalid backup format');if(!confirm('Importing will replace the current transactions and budgets. Continue?'))return;const oldT=transactions,oldB=budgets;transactions=txs.map(t=>({id:Number(t.id)||Date.now()+Math.random(),type:t.type,amount:Number(t.amount),title:t.title,category:String(t.category||'Other'),date:t.date}));budgets=bgs&&typeof bgs==='object'&&!Array.isArray(bgs)?bgs:{};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('Backup restored successfully.')}catch(err){alert('Could not import this file. Please choose a valid My Budget JSON backup.')}finally{$('importFile').value=''}});
 $('csvBtn').addEventListener('click',()=>{const rows=[['Date','Type','Description','Category','Amount'],...transactions.map(t=>[t.date,t.type,t.title,t.category,t.amount])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download('my-budget-transactions-'+localDate(today)+'.csv','\uFEFF'+csv,'text/csv;charset=utf-8;')});
 $('clearBtn').addEventListener('click',()=>{if(!confirm('Delete ALL transactions and budgets on this device? This cannot be undone.'))return;const oldT=transactions,oldB=budgets;transactions=[];budgets={};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('All budget data has been deleted.')});
+
+const PIN_KEY='myBudgetPinHash_v1';
+let pinMode='unlock';
+let pinPendingAction=null;
+async function hashPin(pin){
+  const data=new TextEncoder().encode('my-budget-app-pin-v1:'+pin);
+  const digest=await crypto.subtle.digest('SHA-256',data);
+  return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function showPinOverlay(mode){
+  pinMode=mode;
+  const overlay=$('pinOverlay'),confirmWrap=$('pinConfirmWrap');
+  overlay.hidden=false;
+  $('pinInput').value='';$('pinConfirm').value='';$('pinError').textContent='';
+  confirmWrap.hidden=mode!=='setup';
+  $('pinHeading').textContent=mode==='setup'?'Set your app PIN':'My Budget is locked';
+  $('pinDescription').textContent=mode==='setup'?'Create a 4–8 digit PIN to help protect this app on this device.':'Enter your PIN to access your budget.';
+  $('pinLabel').textContent='PIN';
+  $('pinInput').placeholder=mode==='setup'?'Create 4–8 digit PIN':'Enter your PIN';
+  $('pinSubmit').textContent=mode==='setup'?'Save PIN':'Unlock';
+  $('pinCancel').hidden=mode!=='change';
+  setTimeout(()=>$('pinInput').focus(),100);
+}
+function hidePinOverlay(){$('pinOverlay').hidden=true;$('pinInput').value='';$('pinConfirm').value=''}
+function validPin(pin){return /^\d{4,8}$/.test(pin)}
+async function initializePinLock(){
+  let stored=localStorage.getItem(PIN_KEY);
+  if(!stored){showPinOverlay('setup')}else{$('pinOverlay').hidden=true}
+  $('pinForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const pin=$('pinInput').value;
+    $('pinError').textContent='';
+    try{
+      if(pinMode==='setup'){
+        const confirmPin=$('pinConfirm').value;
+        if(!validPin(pin)){$('pinError').textContent='Use 4–8 numbers for your PIN.';return}
+        if(pin!==confirmPin){$('pinError').textContent='The PINs do not match. Try again.';return}
+        localStorage.setItem(PIN_KEY,await hashPin(pin));
+        hidePinOverlay();alert('PIN lock enabled. Remember your PIN.');
+      }else if(pinMode==='unlock'){
+        stored=localStorage.getItem(PIN_KEY);
+        if(stored && await hashPin(pin)===stored){hidePinOverlay()}
+        else{$('pinError').textContent='Incorrect PIN. Please try again.';$('pinInput').value='';$('pinInput').focus()}
+      }else if(pinMode==='change'){
+        stored=localStorage.getItem(PIN_KEY);
+        if(!stored || await hashPin(pin)!==stored){$('pinError').textContent='Current PIN is incorrect.';return}
+        const next=prompt('Enter a new 4–8 digit PIN. You will confirm it next:');
+        if(next===null)return;
+        if(!validPin(next)){alert('PIN must contain 4–8 numbers.');return}
+        const confirmNext=prompt('Re-enter the new PIN to confirm:');
+        if(confirmNext===null)return;
+        if(next!==confirmNext){alert('PINs do not match. No changes made.');return}
+        localStorage.setItem(PIN_KEY,await hashPin(next));
+        hidePinOverlay();alert('PIN changed successfully.');
+      }
+    }catch(err){$('pinError').textContent='Could not save or verify the PIN in this browser.'}
+  });
+  $('pinCancel').addEventListener('click',()=>{hidePinOverlay();pinPendingAction=null});
+  $('lockBtn').addEventListener('click',()=>showPinOverlay('unlock'));
+  $('changePinBtn').addEventListener('click',()=>{
+    if(!localStorage.getItem(PIN_KEY)){alert('PIN lock is not enabled. Lock the app to set a PIN.');return}
+    showPinOverlay('change');
+  });
+  $('disablePinBtn').addEventListener('click',async()=>{
+    const stored=localStorage.getItem(PIN_KEY);
+    if(!stored){alert('PIN lock is already disabled.');return}
+    const pin=prompt('Enter your current PIN to disable PIN lock:');
+    if(pin===null)return;
+    if(await hashPin(pin)!==stored){alert('Incorrect PIN. PIN lock remains enabled.');return}
+    if(confirm('Disable PIN lock on this device?')){localStorage.removeItem(PIN_KEY);alert('PIN lock disabled.');}
+  });
+}
+
+initializePinLock();
 renderGoals();
 render();
 })();
