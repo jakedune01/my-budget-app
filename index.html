@@ -111,6 +111,19 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
   <p class="note">Savings goals are tracked separately. Updating a goal does not change your income, expenses, or budget balance.</p>
 </section>
 
+<section class="card" id="recurringSection">
+<h2 class="section-title">🔄 Recurring Transaction Reminders</h2>
+<p class="note" style="margin-top:-5px">Reminders only. Nothing is recorded until you confirm it. You can change the amount each time.</p>
+<form id="recurringForm">
+<div class="two"><div><label for="recType">Transaction type</label><select id="recType"><option value="expense">Expense</option><option value="income">Income</option></select></div><div><label for="recAmount">Expected amount (₹)</label><input id="recAmount" type="number" min="0.01" step="0.01" required placeholder="e.g. 25000"></div></div>
+<div><label for="recTitle">Description</label><input id="recTitle" maxlength="80" required placeholder="e.g. Salary, rent, electricity bill"></div>
+<div class="two"><div><label for="recCategory">Category</label><select id="recCategory"><option>Food</option><option>Travel</option><option>Shopping</option><option>Bills</option><option>Health</option><option>Entertainment</option><option>Salary</option><option>Business</option><option>Other</option></select></div><div><label for="recFrequency">Repeat</label><select id="recFrequency"><option value="weekly">Weekly</option><option value="monthly" selected>Monthly</option><option value="yearly">Yearly</option></select></div></div>
+<div><label for="recStartDate">First due date</label><input id="recStartDate" type="date" required></div>
+<button class="primary" type="submit">+ Add Reminder</button>
+</form>
+<div id="recurringReminders" style="margin-top:16px"></div>
+<div id="recurringRules" style="margin-top:16px"></div>
+</section>
 <section class="card"><h2 class="section-title">📊 Expense by Category</h2><div id="categories" class="muted" style="font-size:13px">No expenses yet.</div></section>
 <section class="card"><h2 class="section-title">📒 Transactions</h2><div id="transactions"></div></section>
 </div>
@@ -134,6 +147,10 @@ function read(key,fallback){try{const v=localStorage.getItem(key);return v===nul
 let transactions=read(KEY,[]),budgets=read(BUDGET_KEY,{});
 if(!Array.isArray(transactions))transactions=[];
 if(!budgets||typeof budgets!=='object'||Array.isArray(budgets))budgets={};
+const RECURRING_KEY='myBudgetRecurringRules_v1';
+let recurringRules=read(RECURRING_KEY,[]);
+if(!Array.isArray(recurringRules))recurringRules=[];
+function saveRecurring(){try{localStorage.setItem(RECURRING_KEY,JSON.stringify(recurringRules));return true}catch(e){alert('Could not save recurring reminders. Please check browser storage.');return false}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(transactions));localStorage.setItem(BUDGET_KEY,JSON.stringify(budgets));return true}catch(e){alert('Could not save data. Please check browser storage space.');return false}}
 function money(n){return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(Number(n)||0)}
 function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -241,6 +258,63 @@ $('savingsGoals').addEventListener('click',e=>{
   }
 });
 
+function dateOnly(value){return new Date(value+'T12:00:00')}
+function dateString(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function recurringOccurrence(rule,index){
+  const start=dateOnly(rule.startDate);
+  if(rule.frequency==='weekly'){const d=new Date(start);d.setDate(d.getDate()+index*7);return dateString(d)}
+  if(rule.frequency==='yearly'){
+    const year=start.getFullYear()+index,month=start.getMonth(),day=start.getDate();
+    return dateString(new Date(year,month,Math.min(day,new Date(year,month+1,0).getDate()),12));
+  }
+  const year=start.getFullYear(),month=start.getMonth()+index,day=start.getDate();
+  return dateString(new Date(year,month,Math.min(day,new Date(year,month+1,0).getDate()),12));
+}
+function getReminderState(rule){
+  const todayKey=localDate(today),start=rule.startDate;
+  if(!start)return null;
+  let index=0,latest=null;
+  while(index<600){const d=recurringOccurrence(rule,index);if(d>todayKey)break;latest=d;index++}
+  if(latest && !(rule.handled&&rule.handled[latest]))return {date:latest,status:'due'};
+  const next=recurringOccurrence(rule,index);
+  return {date:next,status:next===todayKey?'due':'upcoming'};
+}
+function renderRecurring(){
+  const reminders=$('recurringReminders'),rulesBox=$('recurringRules');
+  if(!reminders||!rulesBox)return;
+  const states=recurringRules.map(rule=>({rule,state:getReminderState(rule)})).filter(x=>x.state).sort((a,b)=>a.state.date.localeCompare(b.state.date));
+  const due=states.filter(x=>x.state.status==='due');
+  const upcoming=states.filter(x=>x.state.status==='upcoming');
+  const item=(x,isDue)=>`<div class="transaction"><div class="circle">${x.rule.type==='income'?'💵':'🔔'}</div><div class="tx-info"><strong>${esc(x.rule.title)}</strong><small>${isDue?'Due':'Upcoming'} · ${esc(x.state.date)} · ${esc(x.rule.frequency)} · ${money(x.rule.amount)} expected</small></div><div class="tx-right">${isDue?`<button class="secondary" type="button" data-rec-confirm="${esc(x.rule.id)}" style="padding:7px 9px">Confirm</button><button class="delete" type="button" data-rec-skip="${esc(x.rule.id)}">Skip</button>`:`<small class="muted">Not due yet</small>`}</div></div>`;
+  reminders.innerHTML=due.length?`<h3 style="font-size:14px;margin:0 0 5px">📌 Due now</h3>${due.map(x=>item(x,true)).join('')}`:'<div class="empty" style="padding:12px">No reminders due right now.</div>';
+  if(upcoming.length)reminders.innerHTML+=`<h3 style="font-size:14px;margin:15px 0 5px">🗓️ Coming up</h3>${upcoming.map(x=>item(x,false)).join('')}`;
+  rulesBox.innerHTML=recurringRules.length?`<h3 style="font-size:14px;margin:0 0 5px">Your reminder rules</h3>`+recurringRules.map(r=>`<div class="transaction"><div class="circle">${r.type==='income'?'💰':'🔁'}</div><div class="tx-info"><strong>${esc(r.title)}</strong><small>${esc(r.category)} · ${esc(r.frequency)} · ${money(r.amount)} expected</small></div><div class="tx-right"><button class="delete" type="button" data-rec-edit="${esc(r.id)}">Edit</button><button class="delete" type="button" data-rec-delete="${esc(r.id)}">Delete</button></div></div>`).join(''):'<p class="note">No recurring reminders yet.</p>';
+}
+$('recStartDate').value=localDate(today);
+$('recurringForm').addEventListener('submit',e=>{
+ e.preventDefault();const title=$('recTitle').value.trim(),amount=Number($('recAmount').value),startDate=$('recStartDate').value;
+ if(!title||!Number.isFinite(amount)||amount<=0||!startDate){alert('Please enter a description, valid amount, and first due date.');return}
+ recurringRules.push({id:String(Date.now())+Math.random().toString(16).slice(2,6),title,type:$('recType').value,amount,category:$('recCategory').value,frequency:$('recFrequency').value,startDate,handled:{}});
+ if(!saveRecurring()){recurringRules.pop();return}
+ $('recTitle').value='';$('recAmount').value='';renderRecurring();alert('Recurring reminder added. It will not record a transaction automatically.');
+});
+$('recurringReminders').addEventListener('click',e=>{
+ const confirmBtn=e.target.closest('[data-rec-confirm]'),skipBtn=e.target.closest('[data-rec-skip]');
+ if(!confirmBtn&&!skipBtn)return;
+ const id=(confirmBtn||skipBtn).dataset[confirmBtn?'recConfirm':'recSkip'];const rule=recurringRules.find(r=>String(r.id)===String(id));if(!rule)return;
+ const state=getReminderState(rule);if(!state)return;
+ if(confirmBtn){const answer=prompt(`Confirm ${rule.title}. Enter the actual amount (₹):`,String(rule.amount));if(answer===null)return;const amount=Number(answer);if(answer.trim()===''||!Number.isFinite(amount)||amount<=0){alert('Enter a valid amount above zero. Nothing was recorded.');return}
+  const tx={id:Date.now()+Math.floor(Math.random()*1000),type:rule.type,amount,title:rule.title,category:rule.category,date:state.date};transactions.push(tx);if(!save()){transactions.pop();return}rule.handled=rule.handled||{};rule.handled[state.date]=true;if(!saveRecurring()){transactions=transactions.filter(t=>t!==tx);save();return}render();renderRecurring();alert('Transaction recorded for '+state.date+'.');
+ }else{if(!confirm(`Skip this ${rule.title} reminder for ${state.date}? No transaction will be added.`))return;rule.handled=rule.handled||{};rule.handled[state.date]=true;if(saveRecurring())renderRecurring()}
+});
+$('recurringRules').addEventListener('click',e=>{
+ const edit=e.target.closest('[data-rec-edit]'),del=e.target.closest('[data-rec-delete]');if(!edit&&!del)return;
+ const id=(edit||del).dataset[edit?'recEdit':'recDelete'],rule=recurringRules.find(r=>String(r.id)===String(id));if(!rule)return;
+ if(edit){const title=prompt('Reminder description:',rule.title);if(title===null)return;if(!title.trim()){alert('Description cannot be empty.');return}const amountText=prompt('Expected amount (₹):',String(rule.amount));if(amountText===null)return;const amount=Number(amountText);if(amountText.trim()===''||!Number.isFinite(amount)||amount<=0){alert('Enter a valid amount above zero.');return}rule.title=title.trim();rule.amount=amount;if(saveRecurring())renderRecurring()}
+ else{if(!confirm(`Delete the recurring reminder “${rule.title}”? Existing transactions will not be deleted.`))return;const old=recurringRules;recurringRules=recurringRules.filter(r=>String(r.id)!==String(id));if(saveRecurring())renderRecurring();else recurringRules=old}
+});
+renderRecurring();
+
 $('txForm').addEventListener('submit',e=>{
 e.preventDefault();const amount=Number($('amount').value),title=$('title').value.trim(),date=$('date').value;
 if(!Number.isFinite(amount)||amount<=0||!title||!date){alert('Please enter a valid amount, description, and date.');return}
@@ -254,11 +328,11 @@ $('saveBudget').addEventListener('click',()=>{const month=$('month').value,raw=$
 $('themeBtn').addEventListener('click',()=>{document.body.classList.toggle('dark');const dark=document.body.classList.contains('dark');$('themeBtn').textContent=dark?'☀️':'🌙';try{localStorage.setItem(THEME_KEY,dark?'dark':'light')}catch(e){}renderCategoryChart(monthTx())});
 if(read(THEME_KEY,'light')==='dark'){document.body.classList.add('dark');$('themeBtn').textContent='☀️'}
 function download(filename,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-$('exportBtn').addEventListener('click',()=>download('my-budget-backup-'+localDate(today)+'.json',JSON.stringify({version:1,transactions,budgets,theme:read(THEME_KEY,'light')},null,2),'application/json'));
+$('exportBtn').addEventListener('click',()=>download('my-budget-backup-'+localDate(today)+'.json',JSON.stringify({version:2,transactions,budgets,recurringRules,savingsGoals,theme:read(THEME_KEY,'light')},null,2),'application/json'));
 $('importBtn').addEventListener('click',()=>$('importFile').click());
-$('importFile').addEventListener('change',async e=>{const file=e.target.files&&e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());const txs=Array.isArray(data)?data:data.transactions;const bgs=Array.isArray(data)?{}:data.budgets;if(!Array.isArray(txs)||!txs.every(t=>t&&['income','expense'].includes(t.type)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0&&typeof t.title==='string'&&typeof t.date==='string'))throw new Error('Invalid backup format');if(!confirm('Importing will replace the current transactions and budgets. Continue?'))return;const oldT=transactions,oldB=budgets;transactions=txs.map(t=>({id:Number(t.id)||Date.now()+Math.random(),type:t.type,amount:Number(t.amount),title:t.title,category:String(t.category||'Other'),date:t.date}));budgets=bgs&&typeof bgs==='object'&&!Array.isArray(bgs)?bgs:{};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('Backup restored successfully.')}catch(err){alert('Could not import this file. Please choose a valid My Budget JSON backup.')}finally{$('importFile').value=''}});
+$('importFile').addEventListener('change',async e=>{const file=e.target.files&&e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());const txs=Array.isArray(data)?data:data.transactions;const bgs=Array.isArray(data)?{}:data.budgets;if(!Array.isArray(txs)||!txs.every(t=>t&&['income','expense'].includes(t.type)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0&&typeof t.title==='string'&&typeof t.date==='string'))throw new Error('Invalid backup format');if(!confirm('Importing will replace the current transactions and budgets. Continue?'))return;const oldT=transactions,oldB=budgets,oldR=recurringRules,oldG=savingsGoals;transactions=txs.map(t=>({id:Number(t.id)||Date.now()+Math.random(),type:t.type,amount:Number(t.amount),title:t.title,category:String(t.category||'Other'),date:t.date}));budgets=bgs&&typeof bgs==='object'&&!Array.isArray(bgs)?bgs:{};if(Array.isArray(data.recurringRules))recurringRules=data.recurringRules;if(Array.isArray(data.savingsGoals))savingsGoals=data.savingsGoals;if(!save()){transactions=oldT;budgets=oldB;recurringRules=oldR;savingsGoals=oldG;return}if(!saveRecurring()||!saveGoals()){transactions=oldT;budgets=oldB;recurringRules=oldR;savingsGoals=oldG;save();saveRecurring();saveGoals();return}render();renderRecurring();renderGoals();alert('Backup restored successfully.')}catch(err){alert('Could not import this file. Please choose a valid My Budget JSON backup.')}finally{$('importFile').value=''}});
 $('csvBtn').addEventListener('click',()=>{const rows=[['Date','Type','Description','Category','Amount'],...transactions.map(t=>[t.date,t.type,t.title,t.category,t.amount])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download('my-budget-transactions-'+localDate(today)+'.csv','\uFEFF'+csv,'text/csv;charset=utf-8;')});
-$('clearBtn').addEventListener('click',()=>{if(!confirm('Delete ALL transactions and budgets on this device? This cannot be undone.'))return;const oldT=transactions,oldB=budgets;transactions=[];budgets={};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('All budget data has been deleted.')});
+$('clearBtn').addEventListener('click',()=>{if(!confirm('Delete ALL transactions and budgets on this device? This cannot be undone.'))return;const oldT=transactions,oldB=budgets,oldR=recurringRules;transactions=[];budgets={};recurringRules=[];if(!save()||!saveRecurring()){transactions=oldT;budgets=oldB;recurringRules=oldR;save();saveRecurring();return}render();renderRecurring();alert('All budget data has been deleted.')});
 
 const PIN_KEY='myBudgetPinHash_v1';
 const BIOMETRIC_KEY='myBudgetWebAuthnCredential_v1';
