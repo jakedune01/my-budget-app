@@ -72,8 +72,9 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
     <p class="note">PIN lock helps prevent casual access on this device. It does not encrypt your saved data and is not a substitute for your phone's screen lock.</p>
   </div>
 </div>
-<header><div><h1>💰 My Budget</h1><p>Your money, under control.</p></div><div style="display:flex;gap:8px"><button class="icon" id="lockBtn" aria-label="Lock app" title="Lock app">🔒</button><button class="icon" id="themeBtn" aria-label="Toggle theme">🌙</button></div></header>
+<header><div><h1>💰 My Budget</h1><p>Your money, under control.</p></div><div style="display:flex;gap:8px"><button class="icon" id="settingsBtn" aria-label="Open settings" title="Settings">⚙️</button><button class="icon" id="lockBtn" aria-label="Lock app" title="Lock app">🔒</button><button class="icon" id="themeBtn" aria-label="Toggle theme">🌙</button></div></header>
 <main>
+<div id="dashboardPage">
 <div class="month-row"><strong>Overview</strong><input type="month" id="month" aria-label="Select month"></div>
 <section class="card balance"><div class="muted">Remaining balance this month</div><div class="amount" id="balance">₹0.00</div><div class="balance-grid"><div><small>↗ Income</small><strong id="income">₹0.00</strong></div><div><small>↘ Expenses</small><strong id="expense">₹0.00</strong></div></div></section>
 <section class="stats"><div class="card"><div class="stat-title">Transactions</div><div class="stat-value" id="count">0</div></div><div class="card"><div class="stat-title">Daily average expense</div><div class="stat-value" id="average">₹0</div></div></section>
@@ -112,8 +113,13 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
 
 <section class="card"><h2 class="section-title">📊 Expense by Category</h2><div id="categories" class="muted" style="font-size:13px">No expenses yet.</div></section>
 <section class="card"><h2 class="section-title">📒 Transactions</h2><div id="transactions"></div></section>
+</div>
+
+<div id="settingsPage" hidden>
+<div class="month-row"><button class="secondary" id="backToDashboard" type="button">← Back to Dashboard</button><strong>Settings</strong></div>
 <section class="card"><h2 class="section-title">💾 Backup & Restore</h2><div class="actions"><button class="secondary" id="exportBtn" type="button">⬇️ Export Backup</button><button class="secondary" id="importBtn" type="button">⬆️ Import Backup</button></div><input type="file" id="importFile" accept=".json,application/json" hidden><p class="note">Export a backup regularly. Import it on another device to restore your records. Data is not automatically synchronized between devices.</p><button class="secondary" id="csvBtn" type="button" style="width:100%;margin-top:8px">Export Transactions as CSV</button></section>
-<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><div class="two" style="margin-bottom:10px"><button class="secondary" id="changePinBtn" type="button">Change PIN</button><button class="secondary" id="disablePinBtn" type="button">Disable PIN Lock</button></div><button class="secondary" id="fingerprintSetupBtn" type="button" style="width:100%;margin-bottom:10px">👆 Set Up Fingerprint Unlock</button><button class="secondary" id="fingerprintRemoveBtn" type="button" style="width:100%;margin-bottom:10px">Remove Fingerprint Unlock</button><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
+<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><div class="two" style="margin-bottom:10px"><button class="secondary" id="changePinBtn" type="button">Change PIN</button><button class="secondary" id="disablePinBtn" type="button">Disable PIN Lock</button></div><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
+</div>
 <footer class="app-footer"><p>Made with ❤️ by <strong>Jibin</strong> 😎</p><small>My Budget · Personal Finance Tracker · 2026</small></footer>
 </main>
 <script>
@@ -374,6 +380,16 @@ async function initializePinLock(){
   });
 }
 
+$('settingsBtn').addEventListener('click',()=>{
+  $('dashboardPage').hidden=true;
+  $('settingsPage').hidden=false;
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+$('backToDashboard').addEventListener('click',()=>{
+  $('settingsPage').hidden=true;
+  $('dashboardPage').hidden=false;
+  window.scrollTo({top:0,behavior:'smooth'});
+});
 initializePinLock();
 renderGoals();
 render();
