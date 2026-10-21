@@ -60,6 +60,8 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
     <div class="pin-icon">🔐</div>
     <h2 id="pinHeading">My Budget is locked</h2>
     <p id="pinDescription">Enter your PIN to access your budget.</p>
+    <button class="primary" id="fingerprintBtn" type="button" style="width:100%;margin-top:14px" hidden>👆 Unlock with fingerprint</button>
+    <p class="note" id="fingerprintNote" hidden style="margin-bottom:8px">Use your device biometric or screen-lock verification. Your PIN remains available as backup.</p>
     <form id="pinForm">
       <div><label for="pinInput" id="pinLabel">PIN</label><input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" required placeholder="Enter 4–8 digit PIN"></div>
       <div id="pinConfirmWrap" hidden><label for="pinConfirm">Confirm PIN</label><input id="pinConfirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="new-password" placeholder="Re-enter PIN"></div>
@@ -111,7 +113,7 @@ body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#74
 <section class="card"><h2 class="section-title">📊 Expense by Category</h2><div id="categories" class="muted" style="font-size:13px">No expenses yet.</div></section>
 <section class="card"><h2 class="section-title">📒 Transactions</h2><div id="transactions"></div></section>
 <section class="card"><h2 class="section-title">💾 Backup & Restore</h2><div class="actions"><button class="secondary" id="exportBtn" type="button">⬇️ Export Backup</button><button class="secondary" id="importBtn" type="button">⬆️ Import Backup</button></div><input type="file" id="importFile" accept=".json,application/json" hidden><p class="note">Export a backup regularly. Import it on another device to restore your records. Data is not automatically synchronized between devices.</p><button class="secondary" id="csvBtn" type="button" style="width:100%;margin-top:8px">Export Transactions as CSV</button></section>
-<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><div class="two" style="margin-bottom:10px"><button class="secondary" id="changePinBtn" type="button">Change PIN</button><button class="secondary" id="disablePinBtn" type="button">Disable PIN Lock</button></div><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
+<section class="card"><h2 class="section-title">⚙️ Data Settings</h2><div class="two" style="margin-bottom:10px"><button class="secondary" id="changePinBtn" type="button">Change PIN</button><button class="secondary" id="disablePinBtn" type="button">Disable PIN Lock</button></div><button class="secondary" id="fingerprintSetupBtn" type="button" style="width:100%;margin-bottom:10px">👆 Set Up Fingerprint Unlock</button><button class="secondary" id="fingerprintRemoveBtn" type="button" style="width:100%;margin-bottom:10px">Remove Fingerprint Unlock</button><button class="secondary" id="clearBtn" type="button" style="width:100%">Delete All My Data</button><p class="note">Your records are stored in this browser on this device. Clearing browser data may erase them. Keep a backup somewhere safe.</p></section>
 <footer class="app-footer"><p>Made with ❤️ by <strong>Jibin</strong> 😎</p><small>My Budget · Personal Finance Tracker · 2026</small></footer>
 </main>
 <script>
@@ -253,6 +255,7 @@ $('csvBtn').addEventListener('click',()=>{const rows=[['Date','Type','Descriptio
 $('clearBtn').addEventListener('click',()=>{if(!confirm('Delete ALL transactions and budgets on this device? This cannot be undone.'))return;const oldT=transactions,oldB=budgets;transactions=[];budgets={};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('All budget data has been deleted.')});
 
 const PIN_KEY='myBudgetPinHash_v1';
+const BIOMETRIC_KEY='myBudgetWebAuthnCredential_v1';
 let pinMode='unlock';
 let pinPendingAction=null;
 async function hashPin(pin){
@@ -272,10 +275,54 @@ function showPinOverlay(mode){
   $('pinInput').placeholder=mode==='setup'?'Create 4–8 digit PIN':'Enter your PIN';
   $('pinSubmit').textContent=mode==='setup'?'Save PIN':'Unlock';
   $('pinCancel').hidden=mode!=='change';
+  const biometricAvailable=mode==='unlock' && !!localStorage.getItem(BIOMETRIC_KEY) && !!window.PublicKeyCredential && !!navigator.credentials;
+  $('fingerprintBtn').hidden=!biometricAvailable;
+  $('fingerprintNote').hidden=!biometricAvailable;
   setTimeout(()=>$('pinInput').focus(),100);
 }
 function hidePinOverlay(){$('pinOverlay').hidden=true;$('pinInput').value='';$('pinConfirm').value=''}
 function validPin(pin){return /^\d{4,8}$/.test(pin)}
+function randomBytes(length){const bytes=new Uint8Array(length);crypto.getRandomValues(bytes);return bytes}
+function toBase64Url(bytes){let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function fromBase64Url(value){const base=value.replace(/-/g,'+').replace(/_/g,'/');const padded=base+'='.repeat((4-base.length%4)%4);return Uint8Array.from(atob(padded),c=>c.charCodeAt(0))}
+function canUseBiometrics(){return !!(window.isSecureContext && window.PublicKeyCredential && navigator.credentials && navigator.credentials.create && navigator.credentials.get)}
+async function setupFingerprint(){
+  if(!localStorage.getItem(PIN_KEY)){alert('Set up your PIN first.');return}
+  if(!canUseBiometrics()){alert('Fingerprint unlock is not supported in this browser or app. Open My Budget from its HTTPS address in Chrome and try again.');return}
+  try{
+    const credential=await navigator.credentials.create({publicKey:{
+      challenge:randomBytes(32),
+      rp:{name:'My Budget',id:location.hostname},
+      user:{id:randomBytes(16),name:'my-budget-user',displayName:'My Budget User'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',userVerification:'required'},
+      timeout:60000,attestation:'none'
+    }});
+    if(!credential)throw new Error('No credential created');
+    localStorage.setItem(BIOMETRIC_KEY,toBase64Url(new Uint8Array(credential.rawId)));
+    alert('Fingerprint unlock is set up! Next time, tap “Unlock with fingerprint”. Your PIN remains as backup.');
+  }catch(err){
+    const msg=err&&err.name==='NotAllowedError'?'Setup was cancelled or timed out. Try again and follow your phone’s prompt.':'Could not set up fingerprint unlock on this browser/device.';
+    alert(msg);
+  }
+}
+async function unlockWithFingerprint(){
+  const saved=localStorage.getItem(BIOMETRIC_KEY);
+  if(!saved){$('pinError').textContent='Fingerprint unlock is not set up. Use your PIN.';return}
+  if(!canUseBiometrics()){$('pinError').textContent='Biometric unlock is not supported here. Use your PIN.';return}
+  $('pinError').textContent='Waiting for device verification…';
+  try{
+    const credential=await navigator.credentials.get({publicKey:{
+      challenge:randomBytes(32),rpId:location.hostname,
+      allowCredentials:[{type:'public-key',id:fromBase64Url(saved)}],
+      userVerification:'required',timeout:60000
+    }});
+    if(!credential || toBase64Url(new Uint8Array(credential.rawId))!==saved)throw new Error('Credential mismatch');
+    hidePinOverlay();
+  }catch(err){
+    $('pinError').textContent=err&&err.name==='NotAllowedError'?'Fingerprint cancelled or not recognized. Try again or use your PIN.':'Fingerprint unlock failed. Use your PIN as backup.';
+  }
+}
 async function initializePinLock(){
   let stored=localStorage.getItem(PIN_KEY);
   if(!stored){showPinOverlay('setup')}else{$('pinOverlay').hidden=true}
@@ -309,6 +356,9 @@ async function initializePinLock(){
     }catch(err){$('pinError').textContent='Could not save or verify the PIN in this browser.'}
   });
   $('pinCancel').addEventListener('click',()=>{hidePinOverlay();pinPendingAction=null});
+  $('fingerprintBtn').addEventListener('click',unlockWithFingerprint);
+  $('fingerprintSetupBtn').addEventListener('click',setupFingerprint);
+  $('fingerprintRemoveBtn').addEventListener('click',()=>{if(!localStorage.getItem(BIOMETRIC_KEY)){alert('Fingerprint unlock is not set up.');return}if(confirm('Remove fingerprint unlock? You can still use your PIN.')){localStorage.removeItem(BIOMETRIC_KEY);showPinOverlay('unlock');alert('Fingerprint unlock removed. PIN backup is still active.')}});
   $('lockBtn').addEventListener('click',()=>showPinOverlay('unlock'));
   $('changePinBtn').addEventListener('click',()=>{
     if(!localStorage.getItem(PIN_KEY)){alert('PIN lock is not enabled. Lock the app to set a PIN.');return}
