@@ -440,8 +440,6 @@ async function initializePinLock(){
   });
   $('pinCancel').addEventListener('click',()=>{hidePinOverlay();pinPendingAction=null});
   $('fingerprintBtn').addEventListener('click',unlockWithFingerprint);
-  $('fingerprintSetupBtn').addEventListener('click',setupFingerprint);
-  $('fingerprintRemoveBtn').addEventListener('click',()=>{if(!localStorage.getItem(BIOMETRIC_KEY)){alert('Fingerprint unlock is not set up.');return}if(confirm('Remove fingerprint unlock? You can still use your PIN.')){localStorage.removeItem(BIOMETRIC_KEY);showPinOverlay('unlock');alert('Fingerprint unlock removed. PIN backup is still active.')}});
   $('lockBtn').addEventListener('click',()=>{if(!localStorage.getItem(PIN_KEY)){showPinOverlay('setup')}else{showPinOverlay('unlock')}});
   $('changePinBtn').addEventListener('click',()=>{
     if(!localStorage.getItem(PIN_KEY)){showPinOverlay('setup');return}
