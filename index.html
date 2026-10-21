@@ -51,6 +51,30 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);background:v
 <div><label for="title">Description</label><input id="title" maxlength="80" required placeholder="e.g. Lunch, salary, bus fare"></div>
 <div class="two"><div><label for="category">Category</label><select id="category"><option>Food</option><option>Travel</option><option>Shopping</option><option>Bills</option><option>Health</option><option>Entertainment</option><option>Salary</option><option>Business</option><option>Other</option></select></div><div><label for="date">Date</label><input id="date" type="date" required></div></div>
 <button class="primary" type="submit">+ Add Transaction</button></form></section>
+
+<section class="card">
+  <h2 class="section-title">🎯 Savings Goals</h2>
+  <form id="goalForm">
+    <div>
+      <label for="goalName">Goal name</label>
+      <input id="goalName" maxlength="60" required placeholder="e.g. New phone">
+    </div>
+    <div class="two">
+      <div>
+        <label for="goalTarget">Target amount (₹)</label>
+        <input id="goalTarget" type="number" min="0.01" step="0.01" required placeholder="e.g. 80000">
+      </div>
+      <div>
+        <label for="goalSaved">Already saved (₹)</label>
+        <input id="goalSaved" type="number" min="0" step="0.01" value="0" required>
+      </div>
+    </div>
+    <button class="primary" type="submit">+ Add Savings Goal</button>
+  </form>
+  <div id="savingsGoals" style="margin-top:15px"></div>
+  <p class="note">Savings goals are tracked separately. Updating a goal does not change your income, expenses, or budget balance.</p>
+</section>
+
 <section class="card"><h2 class="section-title">📊 Expense by Category</h2><div id="categories" class="muted" style="font-size:13px">No expenses yet.</div></section>
 <section class="card"><h2 class="section-title">📒 Transactions</h2><div id="transactions"></div></section>
 <section class="card"><h2 class="section-title">💾 Backup & Restore</h2><div class="actions"><button class="secondary" id="exportBtn" type="button">⬇️ Export Backup</button><button class="secondary" id="importBtn" type="button">⬆️ Import Backup</button></div><input type="file" id="importFile" accept=".json,application/json" hidden><p class="note">Export a backup regularly. Import it on another device to restore your records. Data is not automatically synchronized between devices.</p><button class="secondary" id="csvBtn" type="button" style="width:100%;margin-top:8px">Export Transactions as CSV</button></section>
@@ -105,6 +129,65 @@ $('categories').innerHTML=cats.length?cats.map(([name,amount])=>`<div style="dis
 const sorted=[...list].sort((a,b)=>b.date.localeCompare(a.date)||(Number(b.id)-Number(a.id)));
 $('transactions').innerHTML=sorted.length?sorted.map(t=>`<div class="transaction"><div class="circle">${t.type==='income'?'💵':icon(t.category)}</div><div class="tx-info"><strong>${esc(t.title)}</strong><small>${esc(t.category)} · ${esc(t.date)}</small></div><div class="tx-right"><strong class="${t.type==='income'?'green':'red'}">${t.type==='income'?'+':'−'}${money(t.amount)}</strong><button class="delete" type="button" data-delete="${esc(t.id)}">Delete</button></div></div>`).join(''):'<div class="empty">No transactions for this month yet.</div>';
 }
+
+const GOALS_KEY='myBudgetSavingsGoals_v1';
+let savingsGoals=read(GOALS_KEY,[]);
+if(!Array.isArray(savingsGoals)) savingsGoals=[];
+function saveGoals(){
+  try{localStorage.setItem(GOALS_KEY,JSON.stringify(savingsGoals));return true}
+  catch(e){alert('Could not save savings goals. Please check available browser storage.');return false}
+}
+function renderGoals(){
+  const host=$('savingsGoals');
+  if(!savingsGoals.length){host.innerHTML='<div class="empty">No savings goals yet. Add your first goal above.</div>';return}
+  host.innerHTML=savingsGoals.map(g=>{
+    const target=Number(g.target)||0, saved=Number(g.saved)||0;
+    const percent=target>0?saved/target*100:0;
+    return `<div class="card" style="margin:12px 0 0;padding:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div style="min-width:0"><strong>${esc(g.name)}</strong><div class="note" style="margin-top:4px">${money(saved)} saved of ${money(target)}</div></div>
+        <strong>${percent.toFixed(0)}%</strong>
+      </div>
+      <div class="progress"><div style="width:${Math.min(percent,100)}%;background:${percent>=100?'var(--green)':'var(--primary)'}"></div></div>
+      <div class="two">
+        <button class="secondary" type="button" data-goal-update="${esc(g.id)}">Update saved amount</button>
+        <button class="secondary" type="button" data-goal-delete="${esc(g.id)}" style="color:var(--red)">Delete goal</button>
+      </div>
+      ${percent>=100?'<p class="note green">🎉 Goal reached!</p>':''}
+    </div>`;
+  }).join('');
+}
+$('goalForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const name=$('goalName').value.trim(),target=Number($('goalTarget').value),saved=Number($('goalSaved').value);
+  if(!name||!Number.isFinite(target)||target<=0||!Number.isFinite(saved)||saved<0){alert('Please enter a goal name, a target above zero, and a valid saved amount.');return}
+  const goal={id:Date.now()+Math.floor(Math.random()*1000),name,target,saved};
+  savingsGoals.push(goal);
+  if(!saveGoals()){savingsGoals.pop();return}
+  $('goalName').value='';$('goalTarget').value='';$('goalSaved').value='0';renderGoals();
+});
+$('savingsGoals').addEventListener('click',e=>{
+  const update=e.target.closest('[data-goal-update]');
+  const del=e.target.closest('[data-goal-delete]');
+  if(update){
+    const goal=savingsGoals.find(g=>String(g.id)===update.dataset.goalUpdate);
+    if(!goal)return;
+    const answer=prompt('Enter the total amount saved so far (₹):',String(goal.saved));
+    if(answer===null)return;
+    const amount=Number(answer);
+    if(answer.trim()===''||!Number.isFinite(amount)||amount<0){alert('Please enter a valid amount of zero or more.');return}
+    const old=goal.saved;goal.saved=amount;
+    if(!saveGoals()){goal.saved=old;return}
+    renderGoals();
+  }else if(del){
+    const id=del.dataset.goalDelete,old=savingsGoals;
+    if(!confirm('Delete this savings goal?'))return;
+    savingsGoals=savingsGoals.filter(g=>String(g.id)!==id);
+    if(!saveGoals()){savingsGoals=old;return}
+    renderGoals();
+  }
+});
+
 $('txForm').addEventListener('submit',e=>{
 e.preventDefault();const amount=Number($('amount').value),title=$('title').value.trim(),date=$('date').value;
 if(!Number.isFinite(amount)||amount<=0||!title||!date){alert('Please enter a valid amount, description, and date.');return}
@@ -123,6 +206,7 @@ $('importBtn').addEventListener('click',()=>$('importFile').click());
 $('importFile').addEventListener('change',async e=>{const file=e.target.files&&e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());const txs=Array.isArray(data)?data:data.transactions;const bgs=Array.isArray(data)?{}:data.budgets;if(!Array.isArray(txs)||!txs.every(t=>t&&['income','expense'].includes(t.type)&&Number.isFinite(Number(t.amount))&&Number(t.amount)>0&&typeof t.title==='string'&&typeof t.date==='string'))throw new Error('Invalid backup format');if(!confirm('Importing will replace the current transactions and budgets. Continue?'))return;const oldT=transactions,oldB=budgets;transactions=txs.map(t=>({id:Number(t.id)||Date.now()+Math.random(),type:t.type,amount:Number(t.amount),title:t.title,category:String(t.category||'Other'),date:t.date}));budgets=bgs&&typeof bgs==='object'&&!Array.isArray(bgs)?bgs:{};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('Backup restored successfully.')}catch(err){alert('Could not import this file. Please choose a valid My Budget JSON backup.')}finally{$('importFile').value=''}});
 $('csvBtn').addEventListener('click',()=>{const rows=[['Date','Type','Description','Category','Amount'],...transactions.map(t=>[t.date,t.type,t.title,t.category,t.amount])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download('my-budget-transactions-'+localDate(today)+'.csv','\uFEFF'+csv,'text/csv;charset=utf-8;')});
 $('clearBtn').addEventListener('click',()=>{if(!confirm('Delete ALL transactions and budgets on this device? This cannot be undone.'))return;const oldT=transactions,oldB=budgets;transactions=[];budgets={};if(!save()){transactions=oldT;budgets=oldB;return}render();alert('All budget data has been deleted.')});
+renderGoals();
 render();
 })();
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(error){console.error('Offline support registration failed:',error)})})}
