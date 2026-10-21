@@ -32,6 +32,13 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);background:v
 .doughnut-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap}#categoryChart{width:180px;height:180px;max-width:100%}#categoryLegend{flex:1;min-width:120px;font-size:13px}
 .trend-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;height:180px;padding-top:10px}.trend-month{flex:1;min-width:0;text-align:center;height:160px;display:flex;flex-direction:column;justify-content:flex-end}.trend-bars{height:125px;display:flex;align-items:flex-end;justify-content:center;gap:3px}.trend-bar{width:40%;max-width:18px;border-radius:4px 4px 0 0}.trend-label{font-size:11px;margin-top:7px}
 .chart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}.legend-dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px}
+
+.budget-alert{display:none;padding:11px 12px;border-radius:12px;margin-top:12px;font-size:13px;line-height:1.45;border:1px solid var(--border)}
+.budget-alert.show{display:block}
+.budget-alert.warning{background:#fff3d6;color:#805400;border-color:#f3d28a}
+.budget-alert.danger{background:#ffe4e8;color:#9c2336;border-color:#f5a9b4}
+body.dark .budget-alert.warning{background:#3a2e18;color:#ffe2a0;border-color:#665027}
+body.dark .budget-alert.danger{background:#3b2029;color:#ffb7c2;border-color:#743443}
 .app-footer{margin-top:20px;padding:25px 12px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--border)}.app-footer p{margin:0}.app-footer strong{color:var(--primary)}.app-footer small{display:block;margin-top:6px;font-size:12px}
 @media(max-width:360px){.balance .amount{font-size:28px}.balance-grid strong{font-size:14px}.two{gap:7px}.card{padding:13px}.doughnut-row{gap:10px}#categoryChart{width:145px;height:145px}}
 </style>
@@ -45,7 +52,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);background:v
 <section class="card"><h2 class="section-title">📊 Income vs Expenses</h2><div class="chart-area"><div class="chart-column"><div id="incomeBar" class="chart-bar" style="background:#159b72"></div><div id="incomeChartValue" class="chart-value">₹0</div><small>Income</small></div><div class="chart-column"><div id="expenseBar" class="chart-bar" style="background:#e34f64"></div><div id="expenseChartValue" class="chart-value">₹0</div><small>Expenses</small></div></div></section>
 <section class="card"><h2 class="section-title">🍩 Expense Breakdown</h2><div class="doughnut-row"><canvas id="categoryChart" width="180" height="180"></canvas><div id="categoryLegend"></div></div></section>
 <section class="card"><h2 class="section-title">📈 Last 6 Months</h2><div id="trendChart" class="trend-chart"></div><div class="chart-legend"><span><i class="legend-dot" style="background:#159b72"></i>Income</span><span><i class="legend-dot" style="background:#e34f64"></i>Expenses</span></div><p class="note">Compare your income and spending over the last six months.</p></section>
-<section class="card"><h2 class="section-title">🎯 Monthly Spending Budget</h2><label for="budget">Your monthly limit (₹)</label><div class="two"><input type="number" id="budget" min="0" step="0.01" placeholder="e.g. 15000"><button class="primary" id="saveBudget" type="button">Save budget</button></div><div class="progress"><div id="progressBar"></div></div><div id="budgetInfo" class="muted" style="font-size:13px">Set a budget to begin.</div></section>
+<section class="card"><h2 class="section-title">🎯 Monthly Spending Budget</h2><label for="budget">Your monthly limit (₹)</label><div class="two"><input type="number" id="budget" min="0" step="0.01" placeholder="e.g. 15000"><button class="primary" id="saveBudget" type="button">Save budget</button></div><div class="progress"><div id="progressBar"></div></div><div id="budgetInfo" class="muted" style="font-size:13px">Set a budget to begin.</div><div id="budgetAlert" class="budget-alert" role="status" aria-live="polite"></div></section>
 <section class="card"><h2 class="section-title">➕ Add Transaction</h2><form id="txForm">
 <div class="two"><div><label for="type">Type</label><select id="type"><option value="expense">Expense</option><option value="income">Income</option></select></div><div><label for="amount">Amount (₹)</label><input id="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></div></div>
 <div><label for="title">Description</label><input id="title" maxlength="80" required placeholder="e.g. Lunch, salary, bus fare"></div>
@@ -123,6 +130,18 @@ const year=Number(month.slice(0,4)),mn=Number(month.slice(5,7)),days=month===loc
 $('average').textContent=money(expenses/Math.max(days||1,1));
 const limit=Number(budgets[month])||0;$('budget').value=limit||'';const percent=limit>0?expenses/limit*100:0;$('progressBar').style.width=Math.min(percent,100)+'%';
 $('budgetInfo').textContent=limit>0?`${money(expenses)} spent of ${money(limit)} (${percent.toFixed(0)}%). ${expenses>limit?'Budget exceeded!':money(limit-expenses)+' remaining.'}`:'Set a budget to begin.';
+const budgetAlert=$('budgetAlert');
+budgetAlert.className='budget-alert';
+if(limit>0 && percent>=100){
+  budgetAlert.classList.add('show','danger');
+  budgetAlert.textContent=`🚨 Budget limit reached! You've spent ${percent.toFixed(0)}% of this month's budget. Try to avoid extra non-essential spending.`;
+}else if(limit>0 && percent>=80){
+  budgetAlert.classList.add('show','warning');
+  budgetAlert.textContent=`⚠️ Budget warning: You've used ${percent.toFixed(0)}% of this month's budget. Only ${money(Math.max(0,limit-expenses))} remains.`;
+}else{
+  budgetAlert.textContent='';
+}
+
 const groups={};list.filter(t=>t.type==='expense').forEach(t=>groups[t.category]=(groups[t.category]||0)+Number(t.amount));
 const cats=Object.entries(groups).sort((a,b)=>b[1]-a[1]);
 $('categories').innerHTML=cats.length?cats.map(([name,amount])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)"><span>${esc(name)}</span><strong>${money(amount)}</strong></div>`).join(''):'<div class="empty">No expenses for this month.</div>';
